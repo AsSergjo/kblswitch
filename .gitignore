@@ -1,0 +1,50 @@
+# CMake build directories
+build/
+build_*/
+build_test/
+out/
+bin/
+CMakeFiles/
+
+# CMake generated files
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Compiled files
+*.obj
+*.o
+*.exe
+*.pdb
+*.ilk
+*.idb
+*.lib
+*.dll
+*.exp
+
+# Visual Studio files
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.opensdf
+*.sdf
+*.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.temp
+
+# Output directories
+Release/
+Debug/
+x64/
+Win32/
