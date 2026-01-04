@@ -1,1 +1,2 @@
 #define IDI_APPICON 101
+#define MENU_ALWAYS_SHOW_OSD 1005
