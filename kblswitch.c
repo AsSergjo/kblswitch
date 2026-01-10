@@ -311,6 +311,19 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             }
             break;
 
+        case WM_SETCURSOR:
+            // Устанавливаем курсор стрелки для клиентской области
+            if (LOWORD(lParam) == HTCLIENT) {
+                SetCursor(LoadCursor(NULL, IDC_ARROW));
+                return TRUE;
+            }
+            break;
+
+        case WM_MOUSEMOVE:
+            // Гарантируем, что курсор остаётся стрелкой при движении мыши
+            SetCursor(LoadCursor(NULL, IDC_ARROW));
+            break;
+
         case WM_DESTROY: {
             
             break;
@@ -449,7 +462,7 @@ void ShowOsdWindow(HINSTANCE hInstance) {
     if (g_alwaysShowOsd) {
         g_osdAlpha = g_osdConfigAlpha;
     } else {
-        g_osdAlpha = 255;
+        g_osdAlpha = 225;
     }
     SetLayeredWindowAttributes(g_hOsdWnd, 0, g_osdAlpha, LWA_ALPHA);
 
@@ -493,6 +506,7 @@ BOOL InitApplication(HINSTANCE hInstance) {
     wc_osd.hInstance = hInstance;
     wc_osd.lpszClassName = OSD_CLASS_NAME;
     wc_osd.hbrBackground = NULL;
+    wc_osd.hCursor = LoadCursor(NULL, IDC_ARROW);
     if (!RegisterClassEx(&wc_osd)) {
         ShowFatalError(L"Failed to register OSD window class.", TRUE);
         return FALSE;
