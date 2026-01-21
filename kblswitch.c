@@ -1,6 +1,3 @@
-#ifndef UNICODE
-#define UNICODE
-#endif
 #ifndef _UNICODE
 #define _UNICODE
 #endif
@@ -19,6 +16,7 @@
 #define OSD_TIMER_ID 1003
 #define OSD_FADE_TIMER_ID 1004
 #define MENU_ALWAYS_SHOW_OSD 1005
+#define OSD_SHOW_TIMER_ID 1006
 #define OSD_CLASS_NAME L"OSDWindowClass"
 
 const UINT WM_TRAYICON = WM_USER + 100;
@@ -102,10 +100,8 @@ LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam) {
                 if (g_modAlt)   keybd_event(VK_MENU,    0, KEYEVENTF_KEYUP, 0);
                 if (g_modShift) keybd_event(VK_SHIFT,   0, KEYEVENTF_KEYUP, 0);
                 if (g_modCtrl)  keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-                
-                Sleep(25);
-
-                PostMessage(g_hWnd, WM_USER + 1, 0, 0);
+  
+                SetTimer(g_hWnd, OSD_SHOW_TIMER_ID, 100, NULL);
 
                 return 1;
             }
@@ -135,8 +131,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
     }
 
     switch (message) {
-    case WM_USER + 1:
-        ShowOsdWindow(GetModuleHandle(NULL));
+    case WM_TIMER:
+        if (wParam == OSD_SHOW_TIMER_ID) {
+            KillTimer(hWnd, OSD_SHOW_TIMER_ID);
+            ShowOsdWindow(GetModuleHandle(NULL));
+        }
         break;
 
     case WM_CREATE:
@@ -288,6 +287,7 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             } else if (wParam == OSD_FADE_TIMER_ID) {
              
                 if (g_alwaysShowOsd) {
+                    
                     KillTimer(hWnd, OSD_FADE_TIMER_ID);
                     return 0;
                 }
