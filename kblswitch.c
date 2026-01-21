@@ -17,6 +17,7 @@
 #define OSD_FADE_TIMER_ID 1004
 #define MENU_ALWAYS_SHOW_OSD 1005
 #define OSD_SHOW_TIMER_ID 1006
+#define LAYOUT_CHECK_TIMER_ID 1007
 #define OSD_CLASS_NAME L"OSDWindowClass"
 
 const UINT WM_TRAYICON = WM_USER + 100;
@@ -112,6 +113,8 @@ LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam) {
 
 // Функция обработки сообщений окна
 LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    static TCHAR previousLayout[64] = {0};
+
     if (message == WM_TRAYICON) {
         switch (lParam) {
         case WM_RBUTTONUP:
@@ -135,6 +138,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
         if (wParam == OSD_SHOW_TIMER_ID) {
             KillTimer(hWnd, OSD_SHOW_TIMER_ID);
             ShowOsdWindow(GetModuleHandle(NULL));
+        } else if (wParam == LAYOUT_CHECK_TIMER_ID) {
+            TCHAR currentLayout[64] = {0};
+            GetLayoutName(currentLayout, _countof(currentLayout));
+
+            if (previousLayout[0] != 0 && _tcscmp(previousLayout, currentLayout) != 0) {
+                ShowOsdWindow(GetModuleHandle(NULL));
+            }
+             _tcscpy_s(previousLayout, _countof(previousLayout), currentLayout);
         }
         break;
 
@@ -150,6 +161,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) 
             AppendMenu(g_hMenu, MF_STRING, MENU_EXIT, L"Выход");
         }
         AddTrayIcon(hWnd);
+        GetLayoutName(previousLayout, _countof(previousLayout));
+        SetTimer(hWnd, LAYOUT_CHECK_TIMER_ID, 500, NULL);
         break;
 
     case WM_COMMAND:
