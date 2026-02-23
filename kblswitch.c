@@ -37,6 +37,7 @@ HWND    g_hOsdWnd = NULL; // Окно OSD
 HMENU   g_hMenu = NULL;
 HICON   g_hIcon = NULL;
 UINT    WM_TASKBARCREATED = 0;
+UINT_PTR g_hExitCheckTimer = 0; // ID таймера проверки завершения
 BYTE    g_osdAlpha = 255; // Текущая прозрачность OSD
 BYTE    g_osdConfigAlpha = 220; // Прозрачность из INI
 TCHAR   g_osdText[64] = {0}; // Текст для OSD
@@ -54,7 +55,6 @@ void ShowTrayMenu(HWND hWnd);
 void GetLayoutName(TCHAR* buffer, int bufferSize);
 void ShowOsdWindow(HINSTANCE hInstance);
 BOOL InitApplication(HINSTANCE hInstance);
-void ParseCommandLine();
 void LoadSettingsFromIni();
 void RunMessageLoop();
 void xMain();
@@ -91,7 +91,15 @@ LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         KBDLLHOOKSTRUCT* ks = (KBDLLHOOKSTRUCT*)lParam;
         if (!(ks->flags & LLKHF_INJECTED)) {
-            if (ks->vkCode == g_key && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+			//автоповтор
+		   static BOOL bKeyProcessed = FALSE;
+           if (wParam == WM_KEYUP || wParam == WM_SYSKEYUP) {
+                  if (ks->vkCode == g_key) bKeyProcessed = FALSE;
+                  return CallNextHookEx(g_khook, nCode, wParam, lParam);
+           }
+			
+            if (ks->vkCode == g_key && !bKeyProcessed && (wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN)) {
+				bKeyProcessed = TRUE;
                 // Нажимаем модификаторы в соответствии с настройками
                 if (g_modCtrl)  keybd_event(VK_CONTROL, 0, 0, 0);
                 if (g_modShift) keybd_event(VK_SHIFT,   0, 0, 0);
@@ -324,6 +332,11 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             }
             break;
 
+        case WM_EXITSIZEMOVE:
+            // После перетаскивания восстанавливаем Z-позицию поверх всех окон
+            SetWindowPos(hWnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            break;
+
         case WM_SETCURSOR:
             // Устанавливаем курсор стрелки для клиентской области
             if (LOWORD(lParam) == HTCLIENT) {
@@ -368,6 +381,7 @@ void ShowTrayMenu(HWND hWnd) {
 
 // Очистка всех выделенных ресурсов
 void CleanupResources() {
+    if (g_hExitCheckTimer) { KillTimer(NULL, g_hExitCheckTimer); g_hExitCheckTimer = 0; }
     if (g_khook) UnhookWindowsHookEx(g_khook);
     if (g_hIcon) DestroyIcon(g_hIcon);
     if (g_hMenu) DestroyMenu(g_hMenu);
@@ -378,18 +392,6 @@ void CleanupResources() {
     g_hMenu = NULL;
     g_hEvent = NULL;
     g_hOsdWnd = NULL;
-}
-
-// Таймер для проверки сигнала завершения от другой копии
-void CALLBACK TimerCb(HWND hWnd, UINT uMsg, UINT_PTR idEvent, DWORD dwTime) {
-    if (WaitForSingleObject(g_hEvent, 0) == WAIT_OBJECT_0) {
-        PostMessage(g_hWnd, WM_CLOSE, 0, 0);
-    }
-}
-
-// Разбор аргументов командной строки (оставлен для совместимости, но не делает ничего)
-void ParseCommandLine() {
-    // Все настройки теперь загружаются из INI-файла
 }
 
 // Загрузка настроек из INI-файла
@@ -429,6 +431,11 @@ void LoadSettingsFromIni() {
 // Получение имени текущей раскладки
 void GetLayoutName(TCHAR* buffer, int bufferSize) {
     HWND fgWnd = GetForegroundWindow();
+    if (!fgWnd) {
+        // Нет активного окна — раскладка неизвестна
+        _tcsncpy_s(buffer, bufferSize, L"??", _TRUNCATE);
+        return;
+    }
     DWORD threadId = GetWindowThreadProcessId(fgWnd, NULL);
     HKL hkl = GetKeyboardLayout(threadId);
         
@@ -472,22 +479,20 @@ void ShowOsdWindow(HINSTANCE hInstance) {
     KillTimer(g_hOsdWnd, OSD_TIMER_ID);
     KillTimer(g_hOsdWnd, OSD_FADE_TIMER_ID);
     
-    if (g_alwaysShowOsd) {
-        g_osdAlpha = g_osdConfigAlpha;
-    } else {
-        g_osdAlpha = 225;
-    }
+    g_osdAlpha = g_osdConfigAlpha; // используем настройку из INI для обоих режимов
     SetLayeredWindowAttributes(g_hOsdWnd, 0, g_osdAlpha, LWA_ALPHA);
 
     // Если окно не в режиме "всегда наверху", центрируем его
     if (!g_alwaysShowOsd) {
         HMONITOR hMonitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = { .cbSize = sizeof(mi) };
+        int x = 0, y = 0;
         if (GetMonitorInfo(hMonitor, &mi)) {
-            int x = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - w) / 2;
-            int y = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - h) / 2;
-            SetWindowPos(g_hOsdWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
+            x = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - w) / 2;
+            y = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - h) / 2;
         }
+        // HWND_TOPMOST всегда, даже если GetMonitorInfo не сработал
+        SetWindowPos(g_hOsdWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
     } else {
         SetWindowPos(g_hOsdWnd, HWND_TOPMOST, 0, 0, w, h, SWP_NOMOVE | SWP_NOACTIVATE);
     }
@@ -539,10 +544,7 @@ BOOL InitApplication(HINSTANCE hInstance) {
         ShowFatalError(L"Failed to set keyboard hook.", TRUE);
         return FALSE;
     }
-    if (SetTimer(NULL, 0, 500, TimerCb) == 0) {
-        ShowFatalError(L"Failed to set timer.", TRUE);
-        return FALSE;
-    }
+
     return TRUE;
 }
 
@@ -562,8 +564,10 @@ void xMain() {
         ShowFatalError(L"Failed to create event object.", TRUE);
     }
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
-        // Другой экземпляр уже запущен
-        ShowFatalError(L"kblswitch is already running!", FALSE);
+        // Первый экземпляр продолжает работать, второй просто завершается
+        CloseHandle(g_hEvent);
+        g_hEvent = NULL;
+        ExitProcess(0);
     }
 
     HINSTANCE hInstance = GetModuleHandle(NULL);
