@@ -22,6 +22,8 @@
 #define REG_KEY_PATH   L"Software\\KBLSwitch"
 #define WORD_BUFFER_SIZE 128
 #define TRAILING_BUFFER_SIZE 16
+#define ENGLISH_LAYOUT_ID L"00000409"
+#define RUSSIAN_LAYOUT_ID L"00000419"
 
 const UINT WM_TRAYICON = WM_USER + 100;
 
@@ -68,6 +70,7 @@ void ShowOsdWindow(HINSTANCE hInstance);
 BOOL InitApplication(HINSTANCE hInstance);
 void LoadSettingsFromIni();
 BOOL CorrectLastWord(BOOL ruToEn);
+BOOL SwitchToCorrectionLayout(BOOL ruToEn);
 void TrackTypedKey(KBDLLHOOKSTRUCT* ks);
 void ResetWordBuffers();
 void SaveOsdPosition(int x, int y);
@@ -323,6 +326,44 @@ BOOL SendUnicodeText(const WCHAR* text, int len) {
     return TRUE;
 }
 
+HKL FindKeyboardLayoutByPrimaryLang(WORD primaryLang) {
+    HKL layouts[64];
+    int count = GetKeyboardLayoutList(_countof(layouts), layouts);
+
+    for (int i = 0; i < count; ++i) {
+        if (PRIMARYLANGID(LOWORD(layouts[i])) == primaryLang) {
+            return layouts[i];
+        }
+    }
+
+    return NULL;
+}
+
+BOOL SwitchForegroundInputLanguage(WORD primaryLang, LPCWSTR fallbackLayoutId) {
+    HKL hkl = FindKeyboardLayoutByPrimaryLang(primaryLang);
+    HWND fgWnd = GetForegroundWindow();
+
+    if (!hkl && fallbackLayoutId) {
+        hkl = LoadKeyboardLayout(fallbackLayoutId, KLF_ACTIVATE);
+    }
+    if (!hkl) return FALSE;
+
+    if (fgWnd) {
+        PostMessage(fgWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)hkl);
+    }
+
+    ActivateKeyboardLayout(hkl, KLF_SETFORPROCESS);
+    return TRUE;
+}
+
+BOOL SwitchToCorrectionLayout(BOOL ruToEn) {
+    if (ruToEn) {
+        return SwitchForegroundInputLanguage(LANG_ENGLISH, ENGLISH_LAYOUT_ID);
+    }
+
+    return SwitchForegroundInputLanguage(LANG_RUSSIAN, RUSSIAN_LAYOUT_ID);
+}
+
 BOOL CorrectLastWord(BOOL ruToEn) {
     WCHAR converted[WORD_BUFFER_SIZE] = {0};
     WCHAR trailingCopy[TRAILING_BUFFER_SIZE] = {0};
@@ -367,6 +408,9 @@ BOOL CorrectLastWord(BOOL ruToEn) {
         g_currentWordLen = 0;
         g_currentWord[0] = L'\0';
     }
+
+    SwitchToCorrectionLayout(ruToEn);
+    SetTimer(g_hWnd, OSD_SHOW_TIMER_ID, 100, NULL);
 
     return TRUE;
 }
