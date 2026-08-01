@@ -1,0 +1,20 @@
+# Нормализация переносов строк
+* text=auto
+
+# Исходный код Windows: CRLF
+*.cpp text eol=crlf
+*.h text eol=crlf
+*.c text eol=crlf
+*.rc text eol=crlf
+*.bat text eol=crlf
+
+# Документация и тексты: LF
+*.md text eol=lf
+*.lng text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Бинарные файлы
+*.ico binary
+*.png binary
+*.exe binary

@@ -22,6 +22,11 @@ Makefile
 *.lib
 *.dll
 *.exp
+*.res
+
+# Local user configuration (may contain personal settings)
+kblswitch.ini
+settings.ini
 
 # Visual Studio files
 *.vcxproj

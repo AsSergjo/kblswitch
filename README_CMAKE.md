@@ -1,60 +1,44 @@
 # Сборка kblswitch с помощью CMake
 
+> Проект компилируется как **C++17**, требует Windows 10/11.
+
 ## Требования
 
 - CMake 3.10 или выше
-- Компилятор C (MSVC для Windows, MinGW или другой совместимый)
-- Для Windows: Visual Studio или Build Tools
+- Visual Studio 2022 (или Build Tools) с компонентом C++ (MSVC)
 
 ## Быстрая сборка (Windows)
 
-### Способ 1: Использование CMake GUI
-1. Установите CMake с официального сайта
-2. Запустите CMake GUI
-3. Укажите исходную директорию (где находится CMakeLists.txt)
-4. Укажите директорию для сборки (например, `build`)
-5. Нажмите Configure, выберите генератор (Visual Studio, MinGW и т.д.)
-6. Нажмите Generate
-7. Откройте сгенерированный проект в выбранной IDE или соберите через командную строку
+### Командная строка
 
-### Способ 2: Командная строка
-```bash
-# Создать директорию для сборки
-mkdir build
-cd build
-
-# Сгенерировать проект
-cmake ..
-
-# Собрать проект
-cmake --build . --config Release
+```bat
+cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release
 ```
 
-Исполняемый файл будет создан в `build/bin/kblswitch.exe`
+Исполняемый файл будет создан в `build/bin/Release/kblswitch.exe` (вместе с `app.ico` и папкой `language\`).
 
-### Способ 3: Использование Visual Studio Developer Command Prompt
+### Visual Studio Developer Command Prompt
+
 ```cmd
 mkdir build
 cd build
-cmake -G "Visual Studio 17 2022" ..
+cmake -G "Visual Studio 17 2022" -A x64 ..
 cmake --build . --config Release
 ```
 
-## Сборка с MinGW
-```bash
-mkdir build
-cd build
-cmake -G "MinGW Makefiles" ..
-cmake --build .
-```
+### Готовый скрипт
+
+Просто запустите `build_cmake.bat`.
 
 ## Структура проекта
 
 - `CMakeLists.txt` - основной файл конфигурации CMake
-- `kblswitch.c` - исходный код приложения
-- `resource.h`, `resource.rc` - файлы ресурсов
+- `kblswitch.cpp` (+ `input.cpp`, `overlay.cpp`, `tray_menu.cpp`, `settings_apply.cpp`, `setting.cpp`, `lng_manager.cpp`) - исходный код
+- `kblswitch.h`, `settings.h`, `lng_manager.h` - заголовки
+- `resource.h`, `resource.rc` - ресурсы (иконка, версия 2.0.0.0)
 - `app.ico` - иконка приложения
-- `kblswitch.ini` - файл конфигурации
+- `language/` - языковые файлы (rus.lng, eng.lng)
 
 ## Доступные цели сборки
 
@@ -66,20 +50,23 @@ cmake --build .
 
 Проект использует следующие настройки:
 - Unicode поддержка (`UNICODE`, `_UNICODE`)
-- Стандарт C11
-- Кодировка UTF-8
+- Стандарт C++17 (`/std:c++17`)
+- Кодировка UTF-8 (`/utf-8`)
 - Подсистема Windows (без консольного окна)
 
 ## Подключенные библиотеки
 
 - `user32` - Windows User API
 - `gdi32` - Graphics Device Interface
-- `shell32` - Shell API
+- `gdiplus` - GDI+ (окно настроек)
+- `shell32` - Shell API (иконка трея)
+- `advapi32` - Advanced API (реестр)
 - `dwmapi` - Desktop Window Manager API
 - `comctl32` - Common Controls
+- `comdlg32` - Common Dialogs
 
 ## Примечания
 
-1. Для корректной работы приложения файл `kblswitch.ini` должен находиться в той же директории, что и исполняемый файл
-2. Иконка `app.ico` автоматически копируется в выходную директорию
-3. При сборке в Debug режиме добавляются отладочные символы
+1. Файл `kblswitch.ini` создаётся автоматически при первом изменении настроек.
+2. Иконка `app.ico` и языковые файлы автоматически копируются в выходную директорию.
+3. При сборке в Debug режиме добавляются отладочные символы.

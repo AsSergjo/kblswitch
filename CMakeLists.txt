@@ -1,17 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
-project(kblswitch LANGUAGES C)
+project(kblswitch LANGUAGES CXX)
 
 # Настройка для Windows
 if(WIN32)
     add_definitions(-DUNICODE -D_UNICODE)
-    set(CMAKE_C_STANDARD 11)
-    set(CMAKE_C_STANDARD_REQUIRED ON)
-    set(CMAKE_C_EXTENSIONS OFF)
+    set(CMAKE_CXX_STANDARD 17)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
     
     # Флаги компиляции
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /utf-8")
-    set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /Zi /Od")
-    set(CMAKE_C_FLAGS_RELEASE "${CMAKE_C_FLAGS_RELEASE} /O2")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8 /EHsc")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Zi /Od")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
     
     # Настройка для сборки Windows приложения
     set(WIN32_EXECUTABLE TRUE)
@@ -19,7 +18,13 @@ endif()
 
 # Исходные файлы
 set(SOURCES
-    kblswitch.c
+    kblswitch.cpp
+    input.cpp
+    overlay.cpp
+    tray_menu.cpp
+    settings_apply.cpp
+    setting.cpp
+    lng_manager.cpp
 )
 
 # Файлы ресурсов
@@ -37,8 +42,11 @@ if(WIN32)
         user32
         gdi32
         shell32
+        advapi32
         dwmapi
         comctl32
+        gdiplus
+        comdlg32
     )
     
     # Устанавливаем подсистему Windows (без консоли)
@@ -66,6 +74,16 @@ if(WIN32)
             COMMENT "Copying kblswitch.ini to output directory"
         )
     endif()
+
+    # Копируем языковые файлы (rus.lng / eng.lng)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/language")
+        add_custom_command(TARGET kblswitch POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_CURRENT_SOURCE_DIR}/language"
+                "$<TARGET_FILE_DIR:kblswitch>/language"
+            COMMENT "Copying language files to output directory"
+        )
+    endif()
 endif()
 
 # Установка выходной директории
@@ -74,7 +92,7 @@ set_target_properties(kblswitch PROPERTIES
 )
 
 # Опционально: установка версии
-set(VERSION_MAJOR 1)
+set(VERSION_MAJOR 2)
 set(VERSION_MINOR 0)
 set(VERSION_PATCH 0)
 set(VERSION "${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}")
