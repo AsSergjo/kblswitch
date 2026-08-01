@@ -11,6 +11,18 @@ static int   g_lastWordLen = 0;
 static WCHAR g_trailingText[TRAILING_BUFFER_SIZE] = {0};
 static int   g_trailingTextLen = 0;
 
+// Состояние физической комбинации Ctrl+Shift. В современных TSF-приложениях
+// (в частности, в Блокноте Windows 11) системный переключатель меняет язык
+// ввода, но GetKeyboardLayout() у потока окна может продолжать возвращать
+// прежний HKL. Поэтому чистую комбинацию Ctrl+Shift отслеживаем также в хуке.
+static BOOL g_physicalCtrlDown = FALSE;
+static BOOL g_physicalShiftDown = FALSE;
+static BOOL g_physicalAltDown = FALSE;
+static BOOL g_physicalWinDown = FALSE;
+static BOOL g_ctrlShiftChordSeen = FALSE;
+static BOOL g_ctrlShiftChordBlocked = FALSE;
+static BOOL g_ctrlShiftChordHandled = FALSE;
+
 // === Исправление последнего слова RU<->EN ===
 static const WCHAR EN_LOWER_MAP[] = L"`qwertyuiop[]asdfghjkl;'zxcvbnm,./";
 static const WCHAR EN_UPPER_MAP[] = L"~QWERTYUIOP{}ASDFGHJKL:\"ZXCVBNM<>?";
@@ -64,6 +76,120 @@ static void ResetWordBuffers() {
     g_lastWord[0] = L'\0';
     g_trailingTextLen = 0;
     g_trailingText[0] = L'\0';
+}
+
+static BOOL IsCtrlKey(UINT vkCode) {
+    return vkCode == VK_CONTROL || vkCode == VK_LCONTROL || vkCode == VK_RCONTROL;
+}
+
+static BOOL IsShiftKey(UINT vkCode) {
+    return vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT;
+}
+
+static BOOL IsAltKey(UINT vkCode) {
+    return vkCode == VK_MENU || vkCode == VK_LMENU || vkCode == VK_RMENU;
+}
+
+static BOOL IsWinKey(UINT vkCode) {
+    return vkCode == VK_LWIN || vkCode == VK_RWIN;
+}
+
+static BOOL UsesCtrlShiftLayoutShortcut() {
+    // Отслеживаем именно ту комбинацию, которую приложение настроено
+    // эмулировать. Это не даёт обычным сочетаниям Ctrl+Shift+<клавиша>
+    // ошибочно менять текст OSD.
+    return g_modCtrl && g_modShift && !g_modAlt &&
+           !IsCtrlKey(g_key) && !IsShiftKey(g_key);
+}
+
+static void ShowPhysicalCtrlShiftResult() {
+    if (!g_currentLang[0]) {
+        GetLayoutName(g_currentLang, _countof(g_currentLang));
+    }
+
+    // KBLSWITCH рассчитан на пару EN/RU. Для TSF нельзя надёжно запросить
+    // новое состояние чужого процесса, поэтому после подтверждённой системной
+    // комбинации запоминаем противоположный язык.
+    if (_tcsicmp(g_currentLang, L"EN") == 0) {
+        _tcscpy_s(g_currentLang, _countof(g_currentLang), L"RU");
+    } else if (_tcsicmp(g_currentLang, L"RU") == 0) {
+        _tcscpy_s(g_currentLang, _countof(g_currentLang), L"EN");
+    } else {
+        // Для неизвестной раскладки оставляем HKL источником истины: штатный
+        // таймер покажет OSD, если приложение действительно обновит HKL.
+        return;
+    }
+
+    ResetWordBuffers();
+    if (g_showCaretIndicator) {
+        g_indicatorTypedChars = 0;
+        g_indicatorShowTick = GetTickCount();
+    }
+    SetTimer(g_hWnd, OSD_SHOW_TIMER_ID, 100, NULL);
+}
+
+static void TrackPhysicalCtrlShift(WPARAM message, UINT vkCode) {
+    if (!UsesCtrlShiftLayoutShortcut()) {
+        g_physicalCtrlDown = FALSE;
+        g_physicalShiftDown = FALSE;
+        g_physicalAltDown = FALSE;
+        g_physicalWinDown = FALSE;
+        g_ctrlShiftChordSeen = FALSE;
+        g_ctrlShiftChordBlocked = FALSE;
+        g_ctrlShiftChordHandled = FALSE;
+        return;
+    }
+
+    const BOOL keyDown = (message == WM_KEYDOWN || message == WM_SYSKEYDOWN);
+    const BOOL keyUp = (message == WM_KEYUP || message == WM_SYSKEYUP);
+    if (!keyDown && !keyUp) return;
+
+    const BOOL isCtrl = IsCtrlKey(vkCode);
+    const BOOL isShift = IsShiftKey(vkCode);
+    const BOOL isAlt = IsAltKey(vkCode);
+    const BOOL isWin = IsWinKey(vkCode);
+
+    if (keyDown) {
+        if (isCtrl) {
+            g_physicalCtrlDown = TRUE;
+        } else if (isShift) {
+            g_physicalShiftDown = TRUE;
+        } else if (isAlt) {
+            g_physicalAltDown = TRUE;
+        } else if (isWin) {
+            g_physicalWinDown = TRUE;
+        } else if (g_physicalCtrlDown || g_physicalShiftDown) {
+            // Alt/Win и любая обычная клавиша превращают жест в прикладное
+            // сочетание (например, Ctrl+Shift+S), OSD для него не показываем.
+            g_ctrlShiftChordBlocked = TRUE;
+        }
+
+        if (g_physicalCtrlDown && g_physicalShiftDown &&
+            !g_physicalAltDown && !g_physicalWinDown && !g_ctrlShiftChordBlocked) {
+            g_ctrlShiftChordSeen = TRUE;
+        }
+        return;
+    }
+
+    // Windows завершает жест переключения при отпускании одного из
+    // модификаторов. К этому моменту можно безопасно показать новый язык.
+    if ((isCtrl || isShift) && g_ctrlShiftChordSeen &&
+        !g_physicalAltDown && !g_physicalWinDown &&
+        !g_ctrlShiftChordBlocked && !g_ctrlShiftChordHandled) {
+        g_ctrlShiftChordHandled = TRUE;
+        ShowPhysicalCtrlShiftResult();
+    }
+
+    if (isCtrl) g_physicalCtrlDown = FALSE;
+    if (isShift) g_physicalShiftDown = FALSE;
+    if (isAlt) g_physicalAltDown = FALSE;
+    if (isWin) g_physicalWinDown = FALSE;
+
+    if (!g_physicalCtrlDown && !g_physicalShiftDown) {
+        g_ctrlShiftChordSeen = FALSE;
+        g_ctrlShiftChordBlocked = FALSE;
+        g_ctrlShiftChordHandled = FALSE;
+    }
 }
 
 static void AppendCurrentWordChar(WCHAR ch) {
@@ -234,42 +360,34 @@ static BOOL SendUnicodeText(const WCHAR* text, int len) {
     return TRUE;
 }
 
-static HKL FindKeyboardLayoutByPrimaryLang(WORD primaryLang) {
-    HKL layouts[64];
-    int count = GetKeyboardLayoutList(_countof(layouts), layouts);
+// Полное переключение раскладки на целевой язык (targetRu):
+// эмулируем настроенную системную комбинацию (Ctrl+Shift по умолчанию) через
+// SendInput с паузами - именно она РЕАЛЬНО переключает язык ввода, в т.ч. в
+// TSF/UWP-приложениях (Store Notepad). WM_INPUTLANGCHANGEREQUEST НЕ используем:
+// он меняет только HKL (отображение), но не фактический язык ввода, и может
+// сбивать уже выполненное переключение.
+// Целевой язык запоминаем для OSD/индикатора (обход stale-HKL в TSF).
+static void DoLayoutSwitch(BOOL targetRu) {
+    INPUT down[3] = {};
+    int n = 0;
+    if (g_modCtrl)  { down[n].type = INPUT_KEYBOARD; down[n].ki.wVk = VK_CONTROL; ++n; }
+    if (g_modShift) { down[n].type = INPUT_KEYBOARD; down[n].ki.wVk = VK_SHIFT;   ++n; }
+    if (g_modAlt)   { down[n].type = INPUT_KEYBOARD; down[n].ki.wVk = VK_MENU;    ++n; }
 
-    for (int i = 0; i < count; ++i) {
-        if (PRIMARYLANGID(LOWORD(layouts[i])) == primaryLang) {
-            return layouts[i];
+    if (n > 0) {
+        // Все модификаторы вниз, пауза, затем вверх в обратном порядке
+        SendInput(n, down, sizeof(INPUT));
+        Sleep(40);
+        for (int i = n - 1; i >= 0; --i) {
+            INPUT up = down[i];
+            up.ki.dwFlags = KEYEVENTF_KEYUP;
+            SendInput(1, &up, sizeof(INPUT));
+            Sleep(20);
         }
     }
 
-    return NULL;
-}
-
-static BOOL SwitchForegroundInputLanguage(WORD primaryLang, LPCWSTR fallbackLayoutId) {
-    HKL hkl = FindKeyboardLayoutByPrimaryLang(primaryLang);
-    HWND fgWnd = GetForegroundWindow();
-
-    if (!hkl && fallbackLayoutId) {
-        hkl = LoadKeyboardLayout(fallbackLayoutId, KLF_ACTIVATE);
-    }
-    if (!hkl) return FALSE;
-
-    if (fgWnd) {
-        PostMessage(fgWnd, WM_INPUTLANGCHANGEREQUEST, 0, (LPARAM)hkl);
-    }
-
-    ActivateKeyboardLayout(hkl, KLF_SETFORPROCESS);
-    return TRUE;
-}
-
-static BOOL SwitchToCorrectionLayout(BOOL ruToEn) {
-    if (ruToEn) {
-        return SwitchForegroundInputLanguage(LANG_ENGLISH, ENGLISH_LAYOUT_ID);
-    }
-
-    return SwitchForegroundInputLanguage(LANG_RUSSIAN, RUSSIAN_LAYOUT_ID);
+    // Целевой язык для OSD/индикатора (отслеживаемый, обход stale-HKL)
+    _tcscpy_s(g_currentLang, _countof(g_currentLang), targetRu ? L"RU" : L"EN");
 }
 
 static BOOL CorrectLastWord(BOOL ruToEn) {
@@ -317,7 +435,9 @@ static BOOL CorrectLastWord(BOOL ruToEn) {
         g_currentWord[0] = L'\0';
     }
 
-    SwitchToCorrectionLayout(ruToEn);
+    // Переключаем ввод на язык результата: эмуляция системной комбинации +
+    // синхронизация HKL (целевой язык запоминается в DoLayoutSwitch)
+    DoLayoutSwitch(ruToEn ? FALSE : TRUE); // RU->EN: цель EN; EN->RU: цель RU
 
     // Показываем индикатор актуальной раскладки у каретки (или у мыши)
     if (g_showCaretIndicator) {
@@ -335,6 +455,8 @@ LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam) {
     if (nCode == HC_ACTION) {
         KBDLLHOOKSTRUCT* ks = (KBDLLHOOKSTRUCT*)lParam;
         if (!(ks->flags & LLKHF_INJECTED)) {
+            TrackPhysicalCtrlShift(wParam, ks->vkCode);
+
             // автоповтор
             static BOOL bKeyProcessed = FALSE;
             static BOOL bFixRuToEnProcessed = FALSE;
@@ -356,7 +478,7 @@ LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam) {
                 }
 
                 // Пока окно настроек открыто и активно - не вмешиваемся в ввод
-                if (SettingsDialogIsOpen() && GetForegroundWindow() == SettingsGetHwnd()) {
+                if (SettingsDialogIsActive()) {
                     return CallNextHookEx(g_khook, nCode, wParam, lParam);
                 }
 
@@ -376,35 +498,15 @@ LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam) {
                     bKeyProcessed = TRUE;
                     ResetWordBuffers();
 
-                    // Переключаем раскладку явно (EN <-> RU) через
-                    // WM_INPUTLANGCHANGEREQUEST. Это корректно работает и для
-                    // TSF-приложений (Блокнот Windows 11), где инжектированный
-                    // Ctrl+Shift меняет язык ввода, но НЕ обновляет HKL потока,
-                    // из-за чего GetLayoutName показывает устаревшую раскладку.
-                    TCHAR curLayout[16] = {0};
-                    GetLayoutName(curLayout, _countof(curLayout));
-                    BOOL curIsRu = (_tcsicmp(curLayout, L"RU") == 0);
-                    BOOL curIsEn = (_tcsicmp(curLayout, L"EN") == 0);
-
-                    BOOL switched = FALSE;
-                    if (curIsRu || curIsEn) {
-                        switched = SwitchForegroundInputLanguage(
-                            curIsRu ? LANG_ENGLISH : LANG_RUSSIAN,
-                            curIsRu ? ENGLISH_LAYOUT_ID : RUSSIAN_LAYOUT_ID);
+                    // Определяем текущую раскладку (по отслеживаемому языку -
+                    // HKL может быть устаревшим в TSF-приложениях) и
+                    // переключаемся на противоположную.
+                    if (!g_currentLang[0]) {
+                        GetLayoutName(g_currentLang, _countof(g_currentLang));
                     }
 
-                    // Если явное переключение не удалось - эмулируем
-                    // системную комбинацию из настроек
-                    if (!switched) {
-                        if (g_modCtrl)  keybd_event(VK_CONTROL, 0, 0, 0);
-                        if (g_modShift) keybd_event(VK_SHIFT,   0, 0, 0);
-                        if (g_modAlt)   keybd_event(VK_MENU,    0, 0, 0);
-
-                        // Отпускаем в обратном порядке
-                        if (g_modAlt)   keybd_event(VK_MENU,    0, KEYEVENTF_KEYUP, 0);
-                        if (g_modShift) keybd_event(VK_SHIFT,   0, KEYEVENTF_KEYUP, 0);
-                        if (g_modCtrl)  keybd_event(VK_CONTROL, 0, KEYEVENTF_KEYUP, 0);
-                    }
+                    // EN -> RU, RU/неизвестно -> EN
+                    DoLayoutSwitch(_tcsicmp(g_currentLang, L"EN") == 0);
 
                     // Показываем индикатор актуальной раскладки у каретки
                     // (или у указателя мыши), если индикатор включён

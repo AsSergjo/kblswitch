@@ -6,8 +6,6 @@
 
 #include <windows.h>
 
-#define SETTINGS_INI_NAME L"kblswitch.ini"
-
 // Все настройки приложения (секция [Settings] файла kblswitch.ini)
 typedef struct Settings {
     UINT     key;                 // Клавиша переключения раскладки (VK-код)
@@ -24,28 +22,21 @@ typedef struct Settings {
     int      language;            // Язык интерфейса: 1 = русский, 2 = английский
 } Settings;
 
-// Путь к INI-файлу (рядом с исполняемым файлом)
-void SettingsGetIniPath(TCHAR* buffer, int bufferSize);
-
 // Загрузка настроек из INI (с значениями по умолчанию)
 void SettingsLoad(Settings* s);
 
-// Сохранение настроек в INI
-void SettingsSave(const Settings* s);
-
 // Применение настроек к работающему приложению.
-// Реализуется в kblswitch.c, вызывается из окна настроек.
+// Реализуется в settings_apply.cpp, вызывается из окна настроек.
 void SettingsApplyToApp(const Settings* s);
 
-// --- Окно настроек (реализация в setting.c) ---
+// --- Окно настроек (реализация в setting.cpp) ---
 // Открывает модальное окно настроек (блокирует до закрытия).
-void SettingsShowDialog(HWND owner, HINSTANCE hInstance);
+void SettingsShowDialog(HWND owner);
 
-// Открыто ли окно настроек и можно ли получить его HWND
-BOOL SettingsDialogIsOpen(void);
-HWND SettingsGetHwnd(void);
+// Активно ли сейчас окно настроек
+BOOL SettingsDialogIsActive(void);
 
-// --- Захват клавиш (используется хуком клавиатуры в kblswitch.c) ---
+// --- Захват клавиш (используется хуком клавиатуры в input.cpp) ---
 // Идёт ли сейчас захват клавиши в окне настроек
 BOOL SettingsIsCapturing(void);
 

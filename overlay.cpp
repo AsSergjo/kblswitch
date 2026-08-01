@@ -10,6 +10,29 @@ static TCHAR   g_osdText[64] = {0}; // Текст для OSD
 static TCHAR   g_indicatorText[16] = {0}; // Текст индикатора
 static HWND    g_indLastFgWnd = NULL; // Последнее активное окно с индикатором
 
+// Закреплённая позиция индикатора для приложений без системной каретки
+// (VS Code, Chromium): фиксируется на момент показа, чтобы индикатор
+// не "ехал" за указателем мыши
+static POINT   g_indAnchor = {0, 0};
+static DWORD   g_indAnchorTick = 0;
+
+static void ApplyRoundedCorners(HWND hWnd) {
+    using DwmSetWindowAttributeFn = HRESULT(WINAPI*)(HWND, DWORD, LPCVOID, DWORD);
+    static HMODULE dwmModule = LoadLibraryW(L"dwmapi.dll");
+    static DwmSetWindowAttributeFn setWindowAttribute = dwmModule
+        ? reinterpret_cast<DwmSetWindowAttributeFn>(
+              GetProcAddress(dwmModule, "DwmSetWindowAttribute"))
+        : nullptr;
+
+    if (!setWindowAttribute) return;
+
+    constexpr DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+    constexpr DWORD DWM_WINDOW_CORNER_PREFERENCE_ROUND = 2;
+    DWORD cornerPreference = DWM_WINDOW_CORNER_PREFERENCE_ROUND;
+    setWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE,
+                       &cornerPreference, sizeof(cornerPreference));
+}
+
 // Получение имени текущей раскладки
 void GetLayoutName(TCHAR* buffer, int bufferSize) {
     HWND fgWnd = GetForegroundWindow();
@@ -52,6 +75,16 @@ static void SaveOsdPosition(int x, int y) {
     }
 }
 
+// Язык для отображения в OSD/индикаторе - отслеживаемый приложением
+// g_currentLang (обход stale-HKL в TSF-приложениях, где HKL не отражает
+// реальный язык ввода). Если ещё не инициализирован - берём из HKL.
+static void GetDisplayLayout(TCHAR* buf, int bufSize) {
+    if (!g_currentLang[0]) {
+        GetLayoutName(g_currentLang, _countof(g_currentLang));
+    }
+    _tcsncpy_s(buf, bufSize, g_currentLang, _TRUNCATE);
+}
+
 // Восстановление позиции OSD-окна из реестра.
 // Возвращает TRUE и заполняет *x/*y, если значения найдены
 static BOOL LoadOsdPosition(int* x, int* y) {
@@ -76,11 +109,6 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
     static const int OSD_FADE_STEP = 15;              // Шаг уменьшения прозрачности при затухании
     static const int OSD_FADE_INTERVAL = 25;          // Интервал таймера затухания (мс)
 
-    // Статические переменные для кэширования DWM API
-    static HRESULT (WINAPI *pDwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD) = NULL;
-    static HMODULE hDwmApi = NULL;
-    static BOOL dwmInitialized = FALSE;
-
     // Состояние перетаскивания
     static BOOL  s_dragging    = FALSE;
     static int   s_dragOffsetX = 0;
@@ -88,26 +116,7 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 
     switch (message) {
         case WM_CREATE: {
-            // Загружаем DWM API для скругления углов (Windows 11+) при первом вызове
-            if (!dwmInitialized) {
-                hDwmApi = LoadLibrary(L"dwmapi.dll");
-                if (hDwmApi) {
-                    pDwmSetWindowAttribute = (HRESULT (WINAPI *)(HWND, DWORD, LPCVOID, DWORD))
-                        GetProcAddress(hDwmApi, "DwmSetWindowAttribute");
-                }
-                dwmInitialized = TRUE;
-            }
-
-            if (pDwmSetWindowAttribute) {
-                // DWMWA_WINDOW_CORNER_PREFERENCE = 33 (dwmapi.h)
-                const DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-                // DWM_WINDOW_CORNER_PREFERENCE_ROUND = 2
-                const DWORD DWM_WINDOW_CORNER_PREFERENCE_ROUND = 2;
-                DWORD cornerPreference = DWM_WINDOW_CORNER_PREFERENCE_ROUND;
-                pDwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                                       &cornerPreference, sizeof(cornerPreference));
-            }
-
+            ApplyRoundedCorners(hWnd);
             break;
         }
 
@@ -119,11 +128,7 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             GetClientRect(hWnd, &rect);
 
             HBRUSH hBrush = CreateSolidBrush(g_osdColor);
-            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
-            // Заливаем прямоугольник фоном
             FillRect(hdc, &rect, hBrush);
-
-            SelectObject(hdc, hOldBrush);
             DeleteObject(hBrush);
 
             // Рисуем текст
@@ -169,8 +174,9 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
         }
 
         case WM_LBUTTONDOWN:
-            if (g_alwaysShowOsd) {
-                // Начинаем ручное перетаскивание
+            // OSD можно перетаскивать мышью в любом режиме;
+            // позиция запоминается в реестре
+            {
                 POINT pt;
                 GetCursorPos(&pt);
                 RECT rc;
@@ -208,7 +214,7 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
                              SWP_NOSIZE | SWP_NOACTIVATE);
                 SetCursor(LoadCursor(NULL, IDC_SIZEALL));
             } else {
-                SetCursor(LoadCursor(NULL, g_alwaysShowOsd ? IDC_SIZEALL : IDC_ARROW));
+                SetCursor(LoadCursor(NULL, IDC_SIZEALL));
             }
             break;
 
@@ -227,9 +233,9 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             break;
 
         case WM_SETCURSOR:
-            // В режиме постоянного OSD - курсор перемещения, иначе - стрелка
+            // Над OSD - курсор перемещения (окно можно перетаскивать)
             if (LOWORD(lParam) == HTCLIENT) {
-                SetCursor(LoadCursor(NULL, g_alwaysShowOsd ? IDC_SIZEALL : IDC_ARROW));
+                SetCursor(LoadCursor(NULL, IDC_SIZEALL));
                 return TRUE;
             }
             break;
@@ -247,11 +253,6 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
             return 0;
         }
 
-        case WM_DESTROY: {
-
-            break;
-        }
-
         default:
             return DefWindowProc(hWnd, message, wParam, lParam);
     }
@@ -259,7 +260,7 @@ LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPara
 }
 
 // Показать OSD-окно
-void ShowOsdWindow(HINSTANCE hInstance) {
+void ShowOsdWindow() {
     int w = g_alwaysShowOsd ? 80 : 150;
     int h = g_alwaysShowOsd ? 60 : 100;
 
@@ -268,11 +269,13 @@ void ShowOsdWindow(HINSTANCE hInstance) {
             WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
             OSD_CLASS_NAME, L"", WS_POPUP,
             0, 0, w, h,
-            NULL, NULL, hInstance, NULL);
+            NULL, NULL, GetModuleHandle(NULL), NULL);
         if (!g_hOsdWnd) return;
     }
 
-    GetLayoutName(g_osdText, _countof(g_osdText));
+    // Текст OSD: сразу после нашего переключения - целевой язык (обход
+    // stale-HKL в TSF), иначе - по текущему HKL
+    GetDisplayLayout(g_osdText, _countof(g_osdText));
 
     KillTimer(g_hOsdWnd, OSD_TIMER_ID);
     KillTimer(g_hOsdWnd, OSD_FADE_TIMER_ID);
@@ -280,40 +283,32 @@ void ShowOsdWindow(HINSTANCE hInstance) {
     g_osdAlpha = g_osdConfigAlpha; // используем настройку из INI для обоих режимов
     SetLayeredWindowAttributes(g_hOsdWnd, 0, g_osdAlpha, LWA_ALPHA);
 
-    // Если окно не в режиме "всегда наверху", центрируем его
-    if (!g_alwaysShowOsd) {
+    // Позиция OSD: если есть сохранённая (перетаскивание) - используем её,
+    // иначе показываем по центру активного монитора.
+    int x = 0, y = 0;
+    BOOL hasSaved = LoadOsdPosition(&x, &y);
+
+    if (!hasSaved) {
         HMONITOR hMonitor = MonitorFromWindow(GetForegroundWindow(), MONITOR_DEFAULTTONEAREST);
         MONITORINFO mi = {};
         mi.cbSize = sizeof(mi);
-        int x = 0, y = 0;
         if (GetMonitorInfo(hMonitor, &mi)) {
             x = mi.rcMonitor.left + (mi.rcMonitor.right - mi.rcMonitor.left - w) / 2;
             y = mi.rcMonitor.top + (mi.rcMonitor.bottom - mi.rcMonitor.top - h) / 2;
         }
-        // HWND_TOPMOST всегда, даже если GetMonitorInfo не сработал
-        SetWindowPos(g_hOsdWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
-    } else {
-        // Режим «всегда на экране»: восстанавливаем сохранённую позицию (если есть)
-        // и проверяем, что окно не вышло за пределы виртуального рабочего стола.
-        int savedX = 0, savedY = 0;
-        BOOL hasSaved = LoadOsdPosition(&savedX, &savedY);
-
-        int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-        int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-        int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-        int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-        if (hasSaved) {
-            // Зажимаем в пределах виртуального десктопа
-            if (savedX < vx)          savedX = vx;
-            if (savedY < vy)          savedY = vy;
-            if (savedX + w > vx + vw) savedX = vx + vw - w;
-            if (savedY + h > vy + vh) savedY = vy + vh - h;
-            SetWindowPos(g_hOsdWnd, HWND_TOPMOST, savedX, savedY, w, h, SWP_NOACTIVATE);
-        } else {
-            SetWindowPos(g_hOsdWnd, HWND_TOPMOST, 0, 0, w, h, SWP_NOMOVE | SWP_NOACTIVATE);
-        }
     }
+
+    // Зажимаем позицию в пределах виртуального рабочего стола (все мониторы)
+    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+    int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+    if (x < vx)          x = vx;
+    if (y < vy)          y = vy;
+    if (x + w > vx + vw) x = vx + vw - w;
+    if (y + h > vy + vh) y = vy + vh - h;
+
+    SetWindowPos(g_hOsdWnd, HWND_TOPMOST, x, y, w, h, SWP_NOACTIVATE);
 
     ShowWindow(g_hOsdWnd, SW_SHOWNOACTIVATE);
     InvalidateRect(g_hOsdWnd, NULL, TRUE);
@@ -327,12 +322,13 @@ void ShowOsdWindow(HINSTANCE hInstance) {
 // Получение позиции текстового курсора (каретки) активного окна в экранных координатах.
 // Возвращает TRUE, если позиция определена.
 //
+// Индикатор показывается при переключении языка в любом приложении.
 // Современные приложения (VS Code, браузеры на Chromium и др.) рисуют каретку сами
-// и не используют системную каретку Windows, поэтому GetGUIThreadInfo возвращает
-// hwndCaret = NULL. В этом случае используем позицию курсора мыши как приближение
-// к месту ввода (пользователь обычно кликает туда, где хочет печатать).
-static BOOL GetTextCaretScreenPos(POINT* pt) {
+// и не используют системную - GetGUIThreadInfo возвращает hwndCaret = NULL,
+// поэтому для них используем позицию курсора мыши как приближение к месту ввода.
+static BOOL GetTextCaretScreenPos(POINT* pt, BOOL* isSystemCaret) {
     if (!pt) return FALSE;
+    if (isSystemCaret) *isSystemCaret = FALSE;
 
     HWND fgWnd = GetForegroundWindow();
     if (!fgWnd) return FALSE;
@@ -351,6 +347,7 @@ static BOOL GetTextCaretScreenPos(POINT* pt) {
         if (ClientToScreen(gti.hwndCaret, &ptClient)) {
             pt->x = ptClient.x;
             pt->y = ptClient.y;
+            if (isSystemCaret) *isSystemCaret = TRUE;
             return TRUE;
         }
     }
@@ -364,24 +361,36 @@ void UpdateLayoutIndicator() {
     if (!g_showCaretIndicator) return;
 
     POINT caret;
-    if (!GetTextCaretScreenPos(&caret)) {
+    BOOL isSystemCaret = FALSE;
+    if (!GetTextCaretScreenPos(&caret, &isSystemCaret)) {
         HideLayoutIndicator();
         return;
     }
 
-    // При смене активного окна - показываем индикатор заново
-    HWND fgWnd = GetForegroundWindow();
-    if (fgWnd != g_indLastFgWnd) {
-        g_indLastFgWnd = fgWnd;
-        g_indicatorTypedChars = 0;
-        g_indicatorShowTick = GetTickCount();
+    // Триггеры показа действуют только в текстовых полях (есть системная
+    // каретка): клик мышью по полю или переключение на такое окно показывают
+    // индикатор У КАРЕТКИ. В окнах без системной каретки (VS Code, Chromium,
+    // OSD, рабочий стол) клики и смена окна индикатор НЕ вызывают.
+    if (isSystemCaret) {
+        // Смена активного окна на текстовое
+        HWND fgWnd = GetForegroundWindow();
+        if (fgWnd != g_indLastFgWnd) {
+            g_indLastFgWnd = fgWnd;
+            g_indicatorTypedChars = 0;
+            g_indicatorShowTick = GetTickCount();
+        }
+        // Клик мыши в текстовом поле (каретка переместилась)
+        if (GetAsyncKeyState(VK_LBUTTON) & 1) {
+            g_indicatorTypedChars = 0;
+            g_indicatorShowTick = GetTickCount();
+        }
     }
 
-    // Клик мыши (была нажата с прошлого опроса) - пользователь переместил
-    // курсор, показываем индикатор заново
-    if (GetAsyncKeyState(VK_LBUTTON) & 1) {
-        g_indicatorTypedChars = 0;
-        g_indicatorShowTick = GetTickCount();
+    // Индикатор показывается только по явному срабатыванию: переключение
+    // языка, навигация по тексту, клик/переход в текстовое поле.
+    if (g_indicatorShowTick == 0) {
+        HideLayoutIndicator();
+        return;
     }
 
     // После начала набора текста индикатор скрываем
@@ -391,10 +400,22 @@ void UpdateLayoutIndicator() {
     }
 
     // Автоматическое закрытие по таймауту (indicator_timeout из INI)
-    if (g_indicatorShowTick != 0 && g_indicatorTimeoutMs > 0 &&
+    if (g_indicatorTimeoutMs > 0 &&
         (DWORD)(GetTickCount() - g_indicatorShowTick) >= g_indicatorTimeoutMs) {
         HideLayoutIndicator();
         return;
+    }
+
+    // Для приложений без системной каретки (VS Code, Chromium) фиксируем
+    // позицию у мыши на момент показа, чтобы индикатор не "ехал" за мышью.
+    // При каждом новом срабатывании (смена языка, навигация) позиция
+    // обновляется заново.
+    if (!isSystemCaret) {
+        if (g_indAnchorTick != g_indicatorShowTick) {
+            g_indAnchor = caret;
+            g_indAnchorTick = g_indicatorShowTick;
+        }
+        caret = g_indAnchor;
     }
 
     const int size = LAYOUT_IND_SIZE;
@@ -410,9 +431,10 @@ void UpdateLayoutIndicator() {
         SetLayeredWindowAttributes(g_hLayoutIndWnd, 0, g_osdConfigAlpha, LWA_ALPHA);
     }
 
-    // Обновляем текст индикатора при смене раскладки
+    // Обновляем текст индикатора: сразу после переключения - целевой язык
+    // (обход stale-HKL), иначе - по текущему HKL
     TCHAR layout[16] = {0};
-    GetLayoutName(layout, _countof(layout));
+    GetDisplayLayout(layout, _countof(layout));
 
     if (_tcscmp(g_indicatorText, layout) != 0) {
         _tcscpy_s(g_indicatorText, _countof(g_indicatorText), layout);
@@ -438,11 +460,6 @@ void UpdateLayoutIndicator() {
     }
     if (y + size > vy + vh) y = vy + vh - size;
 
-    // Фиксируем момент показа (если таймер ещё не был запущен)
-    if (g_indicatorShowTick == 0) {
-        g_indicatorShowTick = GetTickCount();
-    }
-
     SetWindowPos(g_hLayoutIndWnd, HWND_TOPMOST, x, y, size, size,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     UpdateWindow(g_hLayoutIndWnd);
@@ -460,29 +477,9 @@ LRESULT CALLBACK LayoutIndicatorWndProc(HWND hWnd, UINT message, WPARAM wParam, 
     // Высота шрифта для размера окна 32x32
     static const int IND_FONT_HEIGHT = -16;
 
-    // Кэширование DWM API для скругления углов
-    static HRESULT (WINAPI *pDwmSetWindowAttribute)(HWND, DWORD, LPCVOID, DWORD) = NULL;
-    static HMODULE hDwmApi = NULL;
-    static BOOL dwmInitialized = FALSE;
-
     switch (message) {
         case WM_CREATE: {
-            if (!dwmInitialized) {
-                hDwmApi = LoadLibrary(L"dwmapi.dll");
-                if (hDwmApi) {
-                    pDwmSetWindowAttribute = (HRESULT (WINAPI *)(HWND, DWORD, LPCVOID, DWORD))
-                        GetProcAddress(hDwmApi, "DwmSetWindowAttribute");
-                }
-                dwmInitialized = TRUE;
-            }
-
-            if (pDwmSetWindowAttribute) {
-                const DWORD DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-                const DWORD DWM_WINDOW_CORNER_PREFERENCE_ROUND = 2;
-                DWORD cornerPreference = DWM_WINDOW_CORNER_PREFERENCE_ROUND;
-                pDwmSetWindowAttribute(hWnd, DWMWA_WINDOW_CORNER_PREFERENCE,
-                                       &cornerPreference, sizeof(cornerPreference));
-            }
+            ApplyRoundedCorners(hWnd);
             break;
         }
 
@@ -494,9 +491,7 @@ LRESULT CALLBACK LayoutIndicatorWndProc(HWND hWnd, UINT message, WPARAM wParam, 
             GetClientRect(hWnd, &rect);
 
             HBRUSH hBrush = CreateSolidBrush(g_osdColor);
-            HBRUSH hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
             FillRect(hdc, &rect, hBrush);
-            SelectObject(hdc, hOldBrush);
             DeleteObject(hBrush);
 
             SetBkMode(hdc, TRANSPARENT);

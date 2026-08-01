@@ -34,10 +34,6 @@ std::map<std::wstring, std::wstring> BuiltInRussianStrings()
             L"• Современное окно настроек с мгновенным применением изменений;\n"
             L"• Два языка интерфейса: русский и английский.\n\n"
             L"Программа работает в системном трее; контекстное меню - Настройки • О программе • Выход."},
-        {L"main_subtitle", L"Переключение раскладки клавиатуры одной клавишей"},
-        {L"main_hint",
-            L"Правая кнопка мыши - контекстное меню:\n"
-            L"Настройки  \u2022  О программе  \u2022  Выход"},
         {L"error_title", L"Ошибка kblswitch"},
         {L"error_register_class", L"Не удалось зарегистрировать класс главного окна."},
         {L"error_register_osd", L"Не удалось зарегистрировать класс OSD-окна."},
@@ -57,17 +53,11 @@ std::map<std::wstring, std::wstring> BuiltInRussianStrings()
         {L"settings_caret_indicator", L"Индикатор у курсора ввода"},
         {L"settings_indicator_timeout", L"Таймаут индикатора"},
         {L"settings_language", L"Язык"},
-        {L"current_prefix", L"текущее:"},
-        {L"value_on", L"вкл"},
-        {L"value_off", L"выкл"},
         {L"value_disabled", L"- (отключено)"},
-        {L"value_sec", L"сек"},
         {L"value_sec_short", L"с"},
-        {L"value_no_close", L"0 (не закрывать)"},
         {L"press_key", L"Нажмите клавишу..."},
         {L"choose", L"Выбрать"},
         {L"ok", L"OK"},
-        {L"cancel", L"Отмена"},
         {L"right_click_hint", L"Правый клик по кнопке клавиши - отключить"},
         {L"language_russian", L"Русский"},
         {L"language_english", L"English"}

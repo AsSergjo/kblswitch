@@ -56,8 +56,7 @@ HFONT CreateMenuFont() {
 }
 
 // Отрисовка пункта контекстного меню: глиф Segoe Fluent Icons + текст
-void DrawMenuItem(HWND hwnd, LPDRAWITEMSTRUCT di) {
-    (void)hwnd;
+void DrawMenuItem(LPDRAWITEMSTRUCT di) {
     const MenuItemData* item = (const MenuItemData*)di->itemData;
     if (!item) return;
     HDC hdc = di->hDC;

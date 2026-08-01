@@ -1,8 +1,20 @@
 @echo off
 setlocal
 
-REM Stop a running instance so the exe can be overwritten
-taskkill /IM kblswitch.exe /F >nul 2>nul
+REM Stop a running instance and wait until the executable is no longer locked.
+REM taskkill returns an error when no instance exists, so verify with tasklist.
+echo Stopping running kblswitch instance...
+taskkill /IM kblswitch.exe /F >nul 2>&1
+for /L %%I in (1,1,10) do (
+    tasklist /FI "IMAGENAME eq kblswitch.exe" /NH 2>nul | find /I "kblswitch.exe" >nul
+    if errorlevel 1 goto process_stopped
+    timeout /T 1 /NOBREAK >nul
+)
+
+echo ERROR: Cannot stop kblswitch.exe. Run build.bat as administrator.
+exit /b 1
+
+:process_stopped
 
 REM Output folder
 set "SCRIPT_DIR=%~dp0"

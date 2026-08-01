@@ -3,14 +3,7 @@
 
 #include "kblswitch.h"
 
-// Текущий язык интерфейса (используется только в этом модуле)
-static AppLanguage g_language = AppLanguage::Russian;
-
-// Загрузка настроек из INI-файла
-void LoadSettingsFromIni() {
-    Settings s;
-    SettingsLoad(&s);
-
+static void ApplyRuntimeSettings(const Settings& s) {
     g_key = s.key;
     g_modCtrl = s.modCtrl;
     g_modShift = s.modShift;
@@ -22,30 +15,29 @@ void LoadSettingsFromIni() {
     g_showCaretIndicator = s.showCaretIndicator;
     g_indicatorTimeoutMs = s.indicatorTimeoutMs;
     g_osdColor = s.osdColor;
+}
+
+// Загрузка настроек из INI-файла
+void LoadSettingsFromIni() {
+    Settings s;
+    SettingsLoad(&s);
+
+    ApplyRuntimeSettings(s);
 
     // Язык интерфейса (из INI; если ключа нет - остаётся язык по системе)
-    g_language = (AppLanguage)s.language;
-    SetAppLanguage(g_language);
+    SetAppLanguage((AppLanguage)s.language);
 }
 
 // Применение настроек из окна настроек к работающему приложению
 void SettingsApplyToApp(const Settings* s) {
-    g_key = s->key;
-    g_modCtrl = s->modCtrl;
-    g_modShift = s->modShift;
-    g_modAlt = s->modAlt;
-    g_fixRuToEnKey = s->fixRuToEnKey;
-    g_fixEnToRuKey = s->fixEnToRuKey;
-    g_alwaysShowOsd = s->alwaysShowOsd;
-    g_osdConfigAlpha = s->osdAlpha;
-    g_showCaretIndicator = s->showCaretIndicator;
-    g_indicatorTimeoutMs = s->indicatorTimeoutMs;
-    g_osdColor = s->osdColor;
+    if (!s) return;
+
+    ApplyRuntimeSettings(*s);
 
     // Смена языка интерфейса: перестраиваем меню и подсказку трея
-    if (g_language != (AppLanguage)s->language) {
-        g_language = (AppLanguage)s->language;
-        SetAppLanguage(g_language);
+    AppLanguage previousLanguage = GetAppLanguage();
+    SetAppLanguage((AppLanguage)s->language);
+    if (GetAppLanguage() != previousLanguage) {
         BuildContextMenu();
         UpdateTrayTip();
         InvalidateRect(g_hWnd, NULL, TRUE);
@@ -53,7 +45,7 @@ void SettingsApplyToApp(const Settings* s) {
 
     // Применяем видимые изменения
     if (g_alwaysShowOsd) {
-        ShowOsdWindow(GetModuleHandle(NULL));
+        ShowOsdWindow();
     } else if (g_hOsdWnd) {
         ShowWindow(g_hOsdWnd, SW_HIDE);
     }

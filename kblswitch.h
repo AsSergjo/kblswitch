@@ -14,7 +14,6 @@
 #include <stdio.h>
 #include <string>
 #include <shellapi.h>
-#include <dwmapi.h>
 
 #include "resource.h"
 #include "settings.h"
@@ -25,11 +24,8 @@
 #define APP_GUID L"1kblswitch"
 #define MENU_EXIT 1001
 #define MENU_ABOUT 1002
-#define MENU_SETTINGS 1010
 #define OSD_TIMER_ID 1003
 #define OSD_FADE_TIMER_ID 1004
-#define MENU_ALWAYS_SHOW_OSD 1005
-#define MENU_TOGGLE_CARET_IND 1006
 #define OSD_SHOW_TIMER_ID 1006
 #define LAYOUT_CHECK_TIMER_ID 1007
 #define CARET_CHECK_TIMER_ID 1008
@@ -40,8 +36,6 @@
 #define REG_KEY_PATH L"Software\\KBLSwitch"
 #define WORD_BUFFER_SIZE 128
 #define TRAILING_BUFFER_SIZE 16
-#define ENGLISH_LAYOUT_ID L"00000409"
-#define RUSSIAN_LAYOUT_ID L"00000419"
 
 // Сообщение иконки трея
 constexpr UINT WM_TRAYICON = WM_USER + 100;
@@ -71,9 +65,10 @@ extern DWORD    g_indicatorTimeoutMs;
 extern DWORD    g_indicatorShowTick;
 extern UINT     g_fixRuToEnKey;     // Исправить слово: RU -> EN
 extern UINT     g_fixEnToRuKey;     // Исправить слово: EN -> RU
+extern TCHAR    g_currentLang[8];   // Отслеживаемый текущий язык (источник для
+                                    // OSD/индикатора; обход stale-HKL в TSF)
 
 // === Прототипы функций ===
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK OSDWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK LayoutIndicatorWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK KbdHook(int nCode, WPARAM wParam, LPARAM lParam);
@@ -84,17 +79,14 @@ void ShowTrayMenu(HWND hWnd);
 void ShowAppContextMenu(POINT pt);
 void BuildContextMenu();
 void UpdateTrayTip();
-void DrawMenuItem(HWND hwnd, LPDRAWITEMSTRUCT di);
+void DrawMenuItem(LPDRAWITEMSTRUCT di);
 HFONT CreateMenuFont();
 
 void GetLayoutName(TCHAR* buffer, int bufferSize);
-void ShowOsdWindow(HINSTANCE hInstance);
+void ShowOsdWindow();
 void UpdateLayoutIndicator();
 void HideLayoutIndicator();
 
-BOOL InitApplication(HINSTANCE hInstance);
 void LoadSettingsFromIni();
-void RunMessageLoop();
-void xMain();
 
 #endif // KBLSWITCH_H

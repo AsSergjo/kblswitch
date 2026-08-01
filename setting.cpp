@@ -31,6 +31,7 @@ using namespace Gdiplus;
 #define SETTINGS_CLASS L"KBLSwitchSettingsClass"
 #define SETTINGS_W 408
 #define SETTINGS_H 768
+static constexpr WCHAR SETTINGS_INI_NAME[] = L"kblswitch.ini";
 
 // --- Области окна ---
 enum class Hit {
@@ -56,7 +57,6 @@ static RECT OkRect()        { return { 149, 724, 259, 760 }; }   // по цен�
 
 // --- Состояние ---
 static HWND      s_hWnd = NULL;
-static HINSTANCE s_hInst = NULL;
 static Settings  s_settings;   // редактируемый черновик
 
 static ULONG_PTR s_gdiToken = 0;
@@ -127,10 +127,36 @@ static void RoundPath(GraphicsPath& path, REAL x, REAL y, REAL w, REAL h, REAL r
     path.CloseFigure();
 }
 
+static void FillPathWithColor(Graphics& graphics, GraphicsPath& path, const Color& color)
+{
+    SolidBrush brush(color);
+    graphics.FillPath(&brush, &path);
+}
+
+static void DrawPathWithColor(Graphics& graphics, GraphicsPath& path,
+                              const Color& color, REAL width = 1.0f)
+{
+    Pen pen(color, width);
+    graphics.DrawPath(&pen, &path);
+}
+
+static void DrawStringWithColor(Graphics& graphics, const WCHAR* text,
+                                const Font& font, const RectF& layout,
+                                const StringFormat& format, const Color& color)
+{
+    SolidBrush brush(color);
+    graphics.DrawString(text, -1, &font, layout, &format, &brush);
+}
+
+static BOOL PointInRect(const RECT& rect, POINT point)
+{
+    return PtInRect(&rect, point);
+}
+
 // ===================================================================
 // Работа с INI-файлом
 // ===================================================================
-void SettingsGetIniPath(TCHAR* buffer, int bufferSize)
+static void SettingsGetIniPath(TCHAR* buffer, int bufferSize)
 {
     GetModuleFileNameW(NULL, buffer, bufferSize);
     TCHAR* slash = _tcsrchr(buffer, L'\\');
@@ -180,7 +206,7 @@ void SettingsLoad(Settings* s)
                                                       : (int)AppLanguage::Russian;
 }
 
-void SettingsSave(const Settings* s)
+static void SettingsSave(const Settings* s)
 {
     TCHAR iniPath[MAX_PATH];
     SettingsGetIniPath(iniPath, MAX_PATH);
@@ -255,8 +281,8 @@ static void DrawTile(Graphics& g, const Palette& P, RECT rc, bool hot)
     GraphicsPath tile;
     RoundPath(tile, (REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top), 10.0f);
-    g.FillPath(&SolidBrush(hot ? P.tileHot : P.tile), &tile);
-    g.DrawPath(&Pen(hot ? P.outlineHot : P.outline, 1.0f), &tile);
+    FillPathWithColor(g, tile, hot ? P.tileHot : P.tile);
+    DrawPathWithColor(g, tile, hot ? P.outlineHot : P.outline);
 }
 
 static void DrawRowHeader(Graphics& g, const Palette& P, Font& rowFont,
@@ -266,10 +292,9 @@ static void DrawRowHeader(Graphics& g, const Palette& P, Font& rowFont,
     StringFormat nf;
     nf.SetAlignment(StringAlignmentNear);
     nf.SetLineAlignment(StringAlignmentCenter);
-    g.DrawString(caption, -1, &rowFont,
+    DrawStringWithColor(g, caption, rowFont,
         RectF((REAL)row.left + 10, (REAL)row.top, 200.0f,
-              (REAL)(row.bottom - row.top)),
-        &nf, &SolidBrush(P.title));
+              (REAL)(row.bottom - row.top)), nf, P.title);
 }
 
 static void DrawSwitch(Graphics& g, const Palette& P, RECT row, bool enabled)
@@ -279,8 +304,8 @@ static void DrawSwitch(Graphics& g, const Palette& P, RECT row, bool enabled)
     REAL sy = (REAL)row.top + ((REAL)(row.bottom - row.top) - swH) / 2.0f;
     GraphicsPath p;
     RoundPath(p, sx, sy, swW, swH, swH / 2.0f);
-    g.FillPath(&SolidBrush(enabled ? P.accent : P.switchOff), &p);
-    g.DrawPath(&Pen(P.outline, 1.0f), &p);
+    FillPathWithColor(g, p, enabled ? P.accent : P.switchOff);
+    DrawPathWithColor(g, p, P.outline);
     SolidBrush thumb(Color(255, 255, 255, 255));
     g.FillEllipse(&thumb, enabled ? sx + swW - 15.0f : sx + 3.0f, sy + 3.0f, 12.0f, 12.0f);
 }
@@ -292,8 +317,8 @@ static void DrawKeyButton(Graphics& g, const Palette& P, RECT rc, UINT vk,
     RoundPath(p, (REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top), 7.0f);
     bool active = capturing || hot;
-    g.FillPath(&SolidBrush(active ? P.tileHot : P.tile), &p);
-    g.DrawPath(&Pen(capturing ? P.accent : (hot ? P.outlineHot : P.outline), 1.0f), &p);
+    FillPathWithColor(g, p, active ? P.tileHot : P.tile);
+    DrawPathWithColor(g, p, capturing ? P.accent : (hot ? P.outlineHot : P.outline));
 
     WCHAR txt[80];
     if (capturing) {
@@ -305,10 +330,11 @@ static void DrawKeyButton(Graphics& g, const Palette& P, RECT rc, UINT vk,
     StringFormat cf;
     cf.SetAlignment(StringAlignmentCenter);
     cf.SetLineAlignment(StringAlignmentCenter);
-    g.DrawString(txt, -1, &Font(L"Segoe UI Semibold", 13.0f, FontStyleRegular, UnitPixel),
+    Font font(L"Segoe UI Semibold", 13.0f, FontStyleRegular, UnitPixel);
+    DrawStringWithColor(g, txt, font,
         RectF((REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top)),
-        &cf, &SolidBrush(capturing ? P.accent : P.body));
+        cf, capturing ? P.accent : P.body);
 }
 
 static void DrawColorButton(Graphics& g, const Palette& P, RECT rc, COLORREF color, bool hot)
@@ -316,21 +342,22 @@ static void DrawColorButton(Graphics& g, const Palette& P, RECT rc, COLORREF col
     GraphicsPath p;
     RoundPath(p, (REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top), 7.0f);
-    g.FillPath(&SolidBrush(hot ? P.tileHot : P.tile), &p);
-    g.DrawPath(&Pen(hot ? P.outlineHot : P.outline, 1.0f), &p);
+    FillPathWithColor(g, p, hot ? P.tileHot : P.tile);
+    DrawPathWithColor(g, p, hot ? P.outlineHot : P.outline);
 
     GraphicsPath sw;
     RoundPath(sw, (REAL)rc.left + 10.0f, (REAL)rc.top + 6.0f, 20.0f, 20.0f, 5.0f);
-    g.FillPath(&SolidBrush(ColorFromCOLORREF(color)), &sw);
-    g.DrawPath(&Pen(Color(120, 0, 0, 0), 1.0f), &sw);
+    FillPathWithColor(g, sw, ColorFromCOLORREF(color));
+    DrawPathWithColor(g, sw, Color(120, 0, 0, 0));
 
     StringFormat cf;
     cf.SetAlignment(StringAlignmentCenter);
     cf.SetLineAlignment(StringAlignmentCenter);
-    g.DrawString(Lang(L"choose").c_str(), -1, &Font(L"Segoe UI Semibold", 13.0f, FontStyleRegular, UnitPixel),
+    Font font(L"Segoe UI Semibold", 13.0f, FontStyleRegular, UnitPixel);
+    DrawStringWithColor(g, Lang(L"choose").c_str(), font,
         RectF((REAL)rc.left + 36.0f, (REAL)rc.top,
               (REAL)(rc.right - rc.left) - 40.0f, (REAL)(rc.bottom - rc.top)),
-        &cf, &SolidBrush(P.body));
+        cf, P.body);
 }
 
 static void DrawChip(Graphics& g, const Palette& P, RECT rc, const WCHAR* text,
@@ -347,7 +374,8 @@ static void DrawChip(Graphics& g, const Palette& P, RECT rc, const WCHAR* text,
     StringFormat cf;
     cf.SetAlignment(StringAlignmentCenter);
     cf.SetLineAlignment(StringAlignmentCenter);
-    g.DrawString(text, -1, &Font(L"Segoe UI Semibold", 13.0f, FontStyleRegular, UnitPixel),
+    Font font(L"Segoe UI Semibold", 13.0f, FontStyleRegular, UnitPixel);
+    g.DrawString(text, -1, &font,
         RectF((REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top)),
         &cf, &tcol);
@@ -381,15 +409,16 @@ static void DrawButton(Graphics& g, const Palette& P, RECT rc, const WCHAR* text
     GraphicsPath p;
     RoundPath(p, (REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top), 8.0f);
-    g.FillPath(&SolidBrush(hot ? P.tileHot : P.tile), &p);
-    g.DrawPath(&Pen(hot ? P.outlineHot : P.outline, 1.0f), &p);
+    FillPathWithColor(g, p, hot ? P.tileHot : P.tile);
+    DrawPathWithColor(g, p, hot ? P.outlineHot : P.outline);
     StringFormat cf;
     cf.SetAlignment(StringAlignmentCenter);
     cf.SetLineAlignment(StringAlignmentCenter);
-    g.DrawString(text, -1, &Font(L"Segoe UI Semibold", 14.0f, FontStyleRegular, UnitPixel),
+    Font font(L"Segoe UI Semibold", 14.0f, FontStyleRegular, UnitPixel);
+    DrawStringWithColor(g, text, font,
         RectF((REAL)rc.left, (REAL)rc.top,
               (REAL)(rc.right - rc.left), (REAL)(rc.bottom - rc.top)),
-        &cf, &SolidBrush(P.title));
+        cf, P.title);
 }
 
 static void Paint(HDC dc)
@@ -402,8 +431,8 @@ static void Paint(HDC dc)
 
     GraphicsPath outer;
     RoundPath(outer, 1.0f, 1.0f, SETTINGS_W - 2.0f, SETTINGS_H - 2.0f, 8.0f);
-    g.FillPath(&SolidBrush(P.bg), &outer);
-    g.DrawPath(&Pen(P.border, 1.0f), &outer);
+    FillPathWithColor(g, outer, P.bg);
+    DrawPathWithColor(g, outer, P.border);
 
     Font titleFont(L"Segoe UI Semibold", 16.0f, FontStyleRegular, UnitPixel);
     Font rowFont(L"Segoe UI Semibold", 14.0f, FontStyleRegular, UnitPixel);
@@ -414,8 +443,8 @@ static void Paint(HDC dc)
     cf.SetLineAlignment(StringAlignmentCenter);
 
     // Заголовок
-    g.DrawString(Lang(L"settings_title").c_str(), -1, &titleFont,
-        RectF(20.0f, 16.0f, SETTINGS_W - 40.0f, 26.0f), &cf, &SolidBrush(P.title));
+    DrawStringWithColor(g, Lang(L"settings_title").c_str(), titleFont,
+        RectF(20.0f, 16.0f, SETTINGS_W - 40.0f, 26.0f), cf, P.title);
 
     // --- Строка 0: клавиша переключения ---
     {
@@ -479,13 +508,13 @@ static void Paint(HDC dc)
         StringFormat nf;
         nf.SetAlignment(StringAlignmentNear);
         nf.SetLineAlignment(StringAlignmentNear);
-        g.DrawString(Lang(L"settings_osd_alpha").c_str(), -1, &rowFont,
-            RectF((REAL)row.left + 10, (REAL)row.top + 4, 190.0f, 18.0f), &nf, &SolidBrush(P.title));
+        DrawStringWithColor(g, Lang(L"settings_osd_alpha").c_str(), rowFont,
+            RectF((REAL)row.left + 10, (REAL)row.top + 4, 190.0f, 18.0f), nf, P.title);
         StringFormat rf;
         rf.SetAlignment(StringAlignmentFar);
         rf.SetLineAlignment(StringAlignmentCenter);
-        g.DrawString(val, -1, &rowFont,
-            RectF((REAL)row.right - 60, (REAL)row.top + 4, 50.0f, 18.0f), &rf, &SolidBrush(P.title));
+        DrawStringWithColor(g, val, rowFont,
+            RectF((REAL)row.right - 60, (REAL)row.top + 4, 50.0f, 18.0f), rf, P.title);
         DrawSlider(g, P, AlphaTrackRect(), s_settings.osdAlpha / 255.0f,
                    sHover == Hit::Alpha || sPress == Hit::Alpha);
     }
@@ -509,13 +538,13 @@ static void Paint(HDC dc)
         StringFormat nf;
         nf.SetAlignment(StringAlignmentNear);
         nf.SetLineAlignment(StringAlignmentNear);
-        g.DrawString(Lang(L"settings_indicator_timeout").c_str(), -1, &rowFont,
-            RectF((REAL)row.left + 10, (REAL)row.top + 4, 190.0f, 18.0f), &nf, &SolidBrush(P.title));
+        DrawStringWithColor(g, Lang(L"settings_indicator_timeout").c_str(), rowFont,
+            RectF((REAL)row.left + 10, (REAL)row.top + 4, 190.0f, 18.0f), nf, P.title);
         StringFormat rf;
         rf.SetAlignment(StringAlignmentFar);
         rf.SetLineAlignment(StringAlignmentCenter);
-        g.DrawString(val, -1, &rowFont,
-            RectF((REAL)row.right - 60, (REAL)row.top + 4, 50.0f, 18.0f), &rf, &SolidBrush(P.title));
+        DrawStringWithColor(g, val, rowFont,
+            RectF((REAL)row.right - 60, (REAL)row.top + 4, 50.0f, 18.0f), rf, P.title);
         float tfrac = (float)curSec / 10.0f;
         if (tfrac < 0.0f) tfrac = 0.0f;
         if (tfrac > 1.0f) tfrac = 1.0f;
@@ -538,8 +567,8 @@ static void Paint(HDC dc)
     }
 
     // Подсказка и кнопка
-    g.DrawString(Lang(L"right_click_hint").c_str(), -1, &dimFont,
-        RectF(20.0f, 700.0f, SETTINGS_W - 40.0f, 18.0f), &cf, &SolidBrush(P.dim));
+    DrawStringWithColor(g, Lang(L"right_click_hint").c_str(), dimFont,
+        RectF(20.0f, 700.0f, SETTINGS_W - 40.0f, 18.0f), cf, P.dim);
     DrawButton(g, P, OkRect(), Lang(L"ok").c_str(), sHover == Hit::Ok);
 }
 
@@ -576,18 +605,18 @@ void SettingsOnCapturedKey(UINT vk)
 static Hit HitTest(POINT pt)
 {
     for (int i = 0; i < 3; ++i)
-        if (PtInRect(&ModChipRect(i), pt)) return (Hit)((int)Hit::ModCtrl + i);
-    if (PtInRect(&KeyBtnRect(), pt))     return Hit::Key;
-    if (PtInRect(&FixRuEnBtnRect(), pt)) return Hit::FixRuEn;
-    if (PtInRect(&FixEnRuBtnRect(), pt)) return Hit::FixEnRu;
-    if (PtInRect(&ColorBtnRect(), pt))   return Hit::Color;
-    if (PtInRect(&LangRuRect(), pt))     return Hit::LangRu;
-    if (PtInRect(&LangEnRect(), pt))     return Hit::LangEn;
-    if (PtInRect(&OkRect(), pt))         return Hit::Ok;
-    if (PtInRect(&RowRect(4), pt))       return Hit::AlwaysOsd;
-    if (PtInRect(&RowRect(6), pt))       return Hit::Alpha;
-    if (PtInRect(&RowRect(7), pt))       return Hit::Caret;
-    if (PtInRect(&RowRect(8), pt))       return Hit::Timeout;
+        if (PointInRect(ModChipRect(i), pt)) return (Hit)((int)Hit::ModCtrl + i);
+    if (PointInRect(KeyBtnRect(), pt))     return Hit::Key;
+    if (PointInRect(FixRuEnBtnRect(), pt)) return Hit::FixRuEn;
+    if (PointInRect(FixEnRuBtnRect(), pt)) return Hit::FixEnRu;
+    if (PointInRect(ColorBtnRect(), pt))   return Hit::Color;
+    if (PointInRect(LangRuRect(), pt))     return Hit::LangRu;
+    if (PointInRect(LangEnRect(), pt))     return Hit::LangEn;
+    if (PointInRect(OkRect(), pt))         return Hit::Ok;
+    if (PointInRect(RowRect(4), pt))       return Hit::AlwaysOsd;
+    if (PointInRect(RowRect(6), pt))       return Hit::Alpha;
+    if (PointInRect(RowRect(7), pt))       return Hit::Caret;
+    if (PointInRect(RowRect(8), pt))       return Hit::Timeout;
     return Hit::None;
 }
 
@@ -780,13 +809,11 @@ static LRESULT CALLBACK SettingsWndProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
         case Hit::LangRu:
             if (s_settings.language != (int)AppLanguage::Russian) {
                 s_settings.language = (int)AppLanguage::Russian;
-                SetAppLanguage(AppLanguage::Russian);
             }
             break;
         case Hit::LangEn:
             if (s_settings.language != (int)AppLanguage::English) {
                 s_settings.language = (int)AppLanguage::English;
-                SetAppLanguage(AppLanguage::English);
             }
             break;
         case Hit::Ok:        SaveAndClose(hw); return 0;
@@ -874,22 +901,24 @@ static LRESULT CALLBACK SettingsWndProc(HWND hw, UINT msg, WPARAM wp, LPARAM lp)
 // ===================================================================
 // Публичный интерфейс
 // ===================================================================
-BOOL SettingsDialogIsOpen()
+static BOOL IsSettingsDialogOpen()
 {
     return s_hWnd != NULL && IsWindow(s_hWnd);
 }
 
-HWND SettingsGetHwnd()
+BOOL SettingsDialogIsActive()
 {
-    return s_hWnd;
+    return IsSettingsDialogOpen() && GetForegroundWindow() == s_hWnd;
 }
 
-void SettingsShowDialog(HWND owner, HINSTANCE hInstance)
+void SettingsShowDialog(HWND owner)
 {
-    if (SettingsDialogIsOpen()) {
+    if (IsSettingsDialogOpen()) {
         SetForegroundWindow(s_hWnd);
         return;
     }
+
+    HINSTANCE hInstance = GetModuleHandle(NULL);
 
     if (!s_gdiStarted) {
         GdiplusStartupInput input;
@@ -898,7 +927,6 @@ void SettingsShowDialog(HWND owner, HINSTANCE hInstance)
     }
 
     s_dark = IsSystemDarkMode();
-    s_hInst = hInstance;
     SettingsLoad(&s_settings);
     s_capturing = false;
     s_captureTarget = Hit::None;
