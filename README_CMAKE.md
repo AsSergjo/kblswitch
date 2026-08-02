@@ -48,7 +48,7 @@ cmake --build . --config Release
 - `CMakeLists.txt` - основной файл конфигурации CMake
 - `kblswitch.cpp` (+ `input.cpp`, `overlay.cpp`, `tray_menu.cpp`, `settings_apply.cpp`, `setting.cpp`, `lng_manager.cpp`) - исходный код
 - `kblswitch.h`, `settings.h`, `lng_manager.h` - заголовки
-- `resource.h`, `resource.rc` - ресурсы EXE (иконка, версия 2.0.0.0)
+- `resource.h`, `resource.rc` - ресурсы EXE (иконка, версия 2.0.1.0)
 - `app.ico` - многоразмерная Windows-иконка (16, 20, 24, 32, 40, 48, 64, 128 и 256 px)
 - `assets/app-icon.svg` - векторный мастер: две симметрично наложенные полые трубы 2/4/2 и оранжевый центр
 - `assets/app-icon.png` - прозрачный PNG-рендер векторного мастера

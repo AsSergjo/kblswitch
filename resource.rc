@@ -3,10 +3,10 @@
 
 IDI_APPICON ICON "app.ico"
 
-// Версия 2.0.0.0
+// Версия 2.0.1.0
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,0,0,0
- PRODUCTVERSION 2,0,0,0
+ FILEVERSION 2,0,1,0
+ PRODUCTVERSION 2,0,1,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -23,12 +23,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "kblswitch"
             VALUE "FileDescription", "Keyboard Layout Switcher"
-            VALUE "FileVersion", "2.0.0.0"
+            VALUE "FileVersion", "2.0.1.0"
             VALUE "InternalName", "kblswitch"
             VALUE "LegalCopyright", "Copyright (c) 2026 kblswitch contributors"
             VALUE "OriginalFilename", "kblswitch.exe"
             VALUE "ProductName", "kblswitch"
-            VALUE "ProductVersion", "2.0.0.0"
+            VALUE "ProductVersion", "2.0.1.0"
         END
     END
     BLOCK "VarFileInfo"

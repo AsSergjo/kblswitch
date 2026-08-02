@@ -21,7 +21,7 @@ std::map<std::wstring, std::wstring> BuiltInRussianStrings()
         {L"menu_about", L"О программе"},
         {L"menu_exit", L"Выход"},
         {L"about_title", L"О программе kblswitch"},
-        {L"app_version", L"Версия 2.0.0.0"},
+        {L"app_version", L"Версия 2.0.1.0"},
         {L"about_text",
             L"KBLSWITCH - переключатель раскладки клавиатуры с визуальным уведомлением.\n\n"
             L"Возможности:\n"
