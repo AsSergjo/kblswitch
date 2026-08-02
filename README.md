@@ -106,7 +106,7 @@ Language=1
 
 ## 🛠️ Сборка из исходного кода
 
-Требования: Windows 10/11, **Visual Studio 2022** (или Build Tools) с компонентом C++, **CMake** (для способа 2).
+Требования: Windows 10/11, **Visual Studio 2022 или новее** (любая редакция, включая Build Tools) с компонентом «Разработка классических приложений на C++», **CMake** (для способа 2).
 
 ### Способ 1: build.bat (простая сборка через MSVC)
 
@@ -116,16 +116,16 @@ build.bat
 
 Результат: `build\bin\Release\kblswitch.exe` (вместе с `language\` и `app.ico`).
 
-Перед сборкой скрипт останавливает запущенный `kblswitch.exe` и ждёт освобождения файла. Если программа запущена с повышенными правами, `build.bat` также нужно запускать от администратора.
+Перед сборкой скрипт останавливает запущенный `kblswitch.exe` и ждёт освобождения файла. MSVC обнаруживается через `vswhere`, поэтому поддерживаются Community, Professional, Enterprise и Build Tools. Скрипт можно запускать из любой текущей папки. Если программа запущена с повышенными правами, `build.bat` также нужно запускать от администратора.
 
 ### Способ 2: CMake
 
 ```bat
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build -A x64
 cmake --build build --config Release
 ```
 
-Или просто `build_cmake.bat`. Подробнее — в [README_CMAKE.md](README_CMAKE.md).
+Или просто `build_cmake.bat`: он останавливает программу, переходит в каталог проекта и автоматически выбирает установленную Visual Studio. Подробнее — в [README_CMAKE.md](README_CMAKE.md).
 
 ### Непрерывная сборка
 
@@ -151,6 +151,7 @@ assets/app-icon.png    Прозрачный PNG-рендер векторног�
 language/              Языковые файлы (rus.lng, eng.lng)
 docs/screenshots/      Скриншоты интерфейса для документации
 build.bat              Скрипт сборки (MSVC)
+build_cmake.bat        Скрипт сборки через CMake
 CMakeLists.txt         Конфигурация CMake
 .github/workflows/     CI (GitHub Actions)
 ```

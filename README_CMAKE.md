@@ -5,7 +5,7 @@
 ## Требования
 
 - CMake 3.10 или выше
-- Visual Studio 2022 (или Build Tools) с компонентом C++ (MSVC)
+- Visual Studio 2022 или новее (любая редакция, включая Build Tools) с компонентом «Разработка классических приложений на C++» (MSVC)
 
 ## Интерфейс приложения
 
@@ -24,7 +24,7 @@
 ### Командная строка
 
 ```bat
-cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+cmake -S . -B build -A x64
 cmake --build build --config Release
 ```
 
@@ -33,19 +33,19 @@ cmake --build build --config Release
 ### Visual Studio Developer Command Prompt
 
 ```cmd
-mkdir build
-cd build
-cmake -G "Visual Studio 17 2022" -A x64 ..
-cmake --build . --config Release
+cmake -S . -B build -A x64
+cmake --build build --config Release
 ```
 
 ### Готовый скрипт
 
-Просто запустите `build_cmake.bat`.
+Просто запустите `build_cmake.bat`. Скрипт можно запускать из любой текущей папки: он сам переходит в каталог проекта, останавливает работающий `kblswitch.exe`, а CMake автоматически выбирает установленную версию и редакцию Visual Studio.
 
 ## Структура проекта
 
 - `CMakeLists.txt` - основной файл конфигурации CMake
+- `build.bat` - прямая сборка MSVC с поиском установленной Visual Studio через `vswhere`
+- `build_cmake.bat` - автоматическая настройка и Release-сборка через CMake
 - `kblswitch.cpp` (+ `input.cpp`, `overlay.cpp`, `tray_menu.cpp`, `settings_apply.cpp`, `setting.cpp`, `lng_manager.cpp`) - исходный код
 - `kblswitch.h`, `settings.h`, `lng_manager.h` - заголовки
 - `resource.h`, `resource.rc` - ресурсы EXE (иконка, версия 2.0.1.0)
