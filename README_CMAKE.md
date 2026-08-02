@@ -7,6 +7,18 @@
 - CMake 3.10 или выше
 - Visual Studio 2022 (или Build Tools) с компонентом C++ (MSVC)
 
+## Интерфейс приложения
+
+### Окно настроек
+
+![Окно настроек kblswitch](docs/screenshots/settings-window.png)
+
+### Индикатор раскладки возле указателя мыши
+
+В приложениях без системной текстовой каретки индикатор появляется возле указателя и сохраняет позицию до скрытия.
+
+![Индикатор раскладки возле указателя мыши](docs/screenshots/mouse-indicator.png)
+
 ## Быстрая сборка (Windows)
 
 ### Командная строка
@@ -36,9 +48,12 @@ cmake --build . --config Release
 - `CMakeLists.txt` - основной файл конфигурации CMake
 - `kblswitch.cpp` (+ `input.cpp`, `overlay.cpp`, `tray_menu.cpp`, `settings_apply.cpp`, `setting.cpp`, `lng_manager.cpp`) - исходный код
 - `kblswitch.h`, `settings.h`, `lng_manager.h` - заголовки
-- `resource.h`, `resource.rc` - ресурсы (иконка, версия 2.0.0.0)
-- `app.ico` - иконка приложения
+- `resource.h`, `resource.rc` - ресурсы EXE (иконка, версия 2.0.0.0)
+- `app.ico` - многоразмерная Windows-иконка (16, 20, 24, 32, 40, 48, 64, 128 и 256 px)
+- `assets/app-icon.svg` - векторный мастер: две симметрично наложенные полые трубы 2/4/2 и оранжевый центр
+- `assets/app-icon.png` - прозрачный PNG-рендер векторного мастера
 - `language/` - языковые файлы (rus.lng, eng.lng)
+- `docs/screenshots/` - скриншоты интерфейса, используемые в README
 
 ## Доступные цели сборки
 

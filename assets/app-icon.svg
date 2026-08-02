@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <title>kblswitch</title>
+  <defs>
+    <path id="tube-axis" d="M 445,256 L 442.3,265.8 L 434.5,274.8 L 422.3,282.3 L 407.1,288.1 L 390.3,292 L 373.5,294.2 L 358.3,295.3 L 346,296.1 L 337.5,297.5 L 333.1,300.5 L 332.7,305.8 L 335.7,313.9 L 341.2,325 L 347.8,338.7 L 354.3,354.3 L 359.3,370.8 L 362,386.9 L 361.5,401.2 L 357.6,412.5 L 350.5,419.7 L 340.7,422.2 L 329,419.9 L 316.3,413.2 L 303.7,402.9 L 292,390.3 L 281.7,376.8 L 273.1,364.3 L 266.3,354 L 260.8,347.3 L 256,345 L 251.2,347.3 L 245.7,354 L 238.9,364.3 L 230.3,376.8 L 220,390.3 L 208.3,402.9 L 195.7,413.2 L 183,419.9 L 171.3,422.2 L 161.5,419.7 L 154.4,412.5 L 150.5,401.2 L 150,386.9 L 152.7,370.8 L 157.7,354.3 L 164.2,338.7 L 170.8,325 L 176.3,313.9 L 179.3,305.8 L 178.9,300.5 L 174.5,297.5 L 166,296.1 L 153.7,295.3 L 138.5,294.2 L 121.7,292 L 104.9,288.1 L 89.7,282.3 L 77.5,274.8 L 69.7,265.8 L 67,256 L 69.7,246.2 L 77.5,237.2 L 89.7,229.7 L 104.9,223.9 L 121.7,220 L 138.5,217.8 L 153.7,216.7 L 166,215.9 L 174.5,214.5 L 178.9,211.5 L 179.3,206.2 L 176.3,198.1 L 170.8,187 L 164.2,173.3 L 157.7,157.7 L 152.7,141.2 L 150,125.1 L 150.5,110.8 L 154.4,99.5 L 161.5,92.3 L 171.3,89.8 L 183,92.1 L 195.7,98.8 L 208.3,109.1 L 220,121.7 L 230.3,135.2 L 238.9,147.7 L 245.7,158 L 251.2,164.7 L 256,167 L 260.8,164.7 L 266.3,158 L 273.1,147.7 L 281.7,135.2 L 292,121.7 L 303.7,109.1 L 316.3,98.8 L 329,92.1 L 340.7,89.8 L 350.5,92.3 L 357.6,99.5 L 361.5,110.8 L 362,125.1 L 359.3,141.2 L 354.3,157.7 L 347.8,173.3 L 341.2,187 L 335.7,198.1 L 332.7,206.2 L 333.1,211.5 L 337.5,214.5 L 346,215.9 L 358.3,216.7 L 373.5,217.8 L 390.3,220 L 407.1,223.9 L 422.3,229.7 L 434.5,237.2 L 442.3,246.2 Z"/>
+    <mask id="tube" x="0" y="0" width="512" height="512" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="512" height="512" fill="black"/>
+      <use href="#tube-axis" fill="none" stroke="white" stroke-width="128" stroke-linecap="round" stroke-linejoin="round"/>
+      <use href="#tube-axis" fill="none" stroke="black" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+    <mask id="under-upper" x="0" y="0" width="512" height="512" maskUnits="userSpaceOnUse" style="mask-type:luminance">
+      <rect width="512" height="512" fill="white"/>
+      <use href="#tube-axis" transform="rotate(45 256 256)" fill="none" stroke="black" stroke-width="128" stroke-linecap="round" stroke-linejoin="round"/>
+    </mask>
+  </defs>
+  <circle cx="256" cy="256" r="38" fill="#FF7A00"/>
+  <g mask="url(#under-upper)">
+    <g transform="rotate(15 256 256)">
+      <rect width="512" height="512" fill="#000000" mask="url(#tube)"/>
+    </g>
+  </g>
+  <g transform="rotate(45 256 256)">
+    <rect width="512" height="512" fill="#000000" mask="url(#tube)"/>
+  </g>
+</svg>
